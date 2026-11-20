@@ -1,0 +1,1207 @@
+<!DOCTYPE html>
+<html lang="ko" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>나스닥100 레버리지 & 리밸런싱 대시보드</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'Noto Sans KR', 'sans-serif'],
+          },
+          colors: {
+            slate: {
+              950: '#070b14',
+              900: '#0d1322',
+              850: '#131c31',
+              800: '#1a253c',
+            }
+          }
+        }
+      }
+    };
+  </script>
+  <style>
+    body {
+      background-color: #070b14;
+      color: #f1f5f9;
+      font-feature-settings: "tnum" on, "lnum" on;
+    }
+    .tabular-nums {
+      font-variant-numeric: tabular-nums;
+    }
+    /* 커스텀 슬라이더 스타일 */
+    input[type="range"] {
+      -webkit-appearance: none;
+      appearance: none;
+      background: transparent;
+      cursor: pointer;
+    }
+    input[type="range"]::-webkit-slider-runnable-track {
+      height: 6px;
+      border-radius: 9999px;
+      background: #1e293b;
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      margin-top: -6px;
+      background-color: #38bdf8;
+      height: 18px;
+      width: 18px;
+      border-radius: 9999px;
+      border: 2px solid #0f172a;
+      box-shadow: 0 0 10px rgba(56, 189, 248, 0.5);
+      transition: transform 0.15s ease;
+    }
+    input[type="range"]::-webkit-slider-thumb:hover {
+      transform: scale(1.15);
+    }
+    /* 숫자 입력 화살표 제거 */
+    input[type="number"]::-webkit-inner-spin-button,
+    input[type="number"]::-webkit-outer-spin-button {
+      -webkit-appearance: none;
+      margin: 0;
+    }
+    input[type="number"] {
+      -moz-appearance: textfield;
+    }
+  </style>
+</head>
+<body class="min-h-screen bg-slate-950 text-slate-100 antialiased selection:bg-sky-500/30 selection:text-sky-200">
+
+  <!-- 상단 알림 토스트 메시지 박스 -->
+  <div id="toastBox" class="fixed top-4 right-4 z-50 hidden max-w-sm rounded-xl border border-slate-700 bg-slate-900/95 px-4 py-3 text-sm shadow-2xl backdrop-blur transition-all">
+    <div class="flex items-start gap-3">
+      <span id="toastIcon" class="mt-0.5 text-base">ℹ️</span>
+      <div class="flex-1">
+        <p id="toastTitle" class="font-semibold text-white">알림</p>
+        <p id="toastDesc" class="mt-0.5 text-xs text-slate-300 leading-relaxed"></p>
+      </div>
+    </div>
+  </div>
+
+  <!-- 메인 컨테이너 -->
+  <div class="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+
+    <!-- 1. 헤더 영역 -->
+    <header class="mb-6 rounded-2xl border border-slate-800/90 bg-slate-900/80 p-4 sm:p-6 shadow-xl backdrop-blur">
+      <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <div class="flex flex-wrap items-center gap-2.5">
+            <span class="inline-flex items-center gap-1.5 rounded-lg bg-sky-500/15 px-2.5 py-1 text-xs font-semibold text-sky-400 border border-sky-500/20">
+              <span class="h-1.5 w-1.5 rounded-full bg-sky-400 animate-pulse"></span>
+              NQ / MNQ · RP 하이브리드 트래커
+            </span>
+            <span id="lastUpdatedBadge" class="rounded-lg bg-slate-800 px-2.5 py-1 text-xs text-slate-400 tabular-nums">
+              업데이트: 기본값 로드됨
+            </span>
+          </div>
+          <h1 class="mt-2 text-xl sm:text-2xl font-bold tracking-tight text-white">
+            나스닥100 레버리지 &amp; 리밸런싱 대시보드
+          </h1>
+          <p class="mt-1 text-xs sm:text-sm text-slate-400">
+            미니 나스닥100 선물(MNQ/NQ) 노출액과 원화 RP·현금 잔고를 통합해 실질 레버리지와 일일 조정 계약 수를 계산합니다.
+          </p>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-2.5">
+          <button id="fetchMarketBtn" onclick="fetchMarketData()" class="inline-flex items-center justify-center gap-2 rounded-xl bg-sky-600 hover:bg-sky-500 active:bg-sky-700 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-sky-900/30 transition cursor-pointer">
+            <svg id="fetchSpinner" class="hidden h-4 w-4 animate-spin text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+            </svg>
+            <svg id="fetchIcon" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            <span>장마감 시세 불러오기 (무료 피드)</span>
+          </button>
+
+          <button onclick="toggleGuide()" class="inline-flex items-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800/80 hover:bg-slate-800 px-3.5 py-2.5 text-xs sm:text-sm font-medium text-slate-200 transition cursor-pointer">
+            <span>0원 배포 &amp; API 가이드</span>
+            <svg id="guideChevron" class="h-4 w-4 transition-transform" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+
+          <button onclick="resetDefaults()" class="inline-flex items-center gap-1.5 rounded-xl border border-slate-800 bg-slate-950/60 hover:bg-slate-800 px-3 py-2.5 text-xs font-medium text-slate-400 hover:text-slate-200 transition cursor-pointer" title="모든 입력값을 초기 샘플로 되돌립니다">
+            초기화
+          </button>
+        </div>
+      </div>
+
+      <!-- 접이식 0원 운영 및 API 키 설정 가이드 -->
+      <div id="guidePanel" class="hidden mt-5 rounded-xl border border-slate-700/80 bg-slate-950/90 p-4 sm:p-5 text-xs sm:text-sm text-slate-300">
+        <div class="grid gap-5 lg:grid-cols-2">
+          <div class="space-y-2.5">
+            <h3 class="font-bold text-sky-400 flex items-center gap-1.5">
+              <span>💡 서버 비용 0원으로 평생 내 웹앱처럼 쓰는 법</span>
+            </h3>
+            <ol class="list-decimal list-inside space-y-1.5 text-slate-300 leading-relaxed">
+              <li>이 화면의 코드를 <code class="rounded bg-slate-800 px-1.5 py-0.5 text-sky-300">index.html</code> 파일 하나로 저장합니다.</li>
+              <li><strong>GitHub Pages</strong>, <strong>Vercel</strong>, 또는 <strong>Cloudflare Pages</strong>(모두 무료)에 해당 파일만 올리면 나만의 <code class="text-emerald-400">https://...</code> 주소가 생깁니다.</li>
+              <li>스마트폰 사파리/크롬에서 해당 주소를 열고 <strong>[홈 화면에 추가]</strong>를 누르면 앱처럼 즉시 실행됩니다.</li>
+              <li>입력하신 잔고·계약 수·API 키는 외부 서버가 아닌 <strong>내 브라우저(localStorage)</strong>에만 안전하게 저장됩니다.</li>
+            </ol>
+          </div>
+          <div class="space-y-3 rounded-xl border border-slate-800 bg-slate-900/70 p-4">
+            <h3 class="font-bold text-emerald-400">🔑 선택사항: 무료 시세 API 키 연동 (장마감 지수 자동화)</h3>
+            <p class="text-xs text-slate-400 leading-relaxed">
+              환율(<code class="text-slate-300">open.er-api.com</code>)은 키 없이 바로 자동 조회됩니다. 나스닥 지수(QQQ 환산 또는 NDX)까지 한 번에 자동 갱신하려면 <strong>Twelve Data</strong> 또는 <strong>Finnhub</strong> 무료 키(일일 800회 무료)를 입력해 두세요.
+            </p>
+            <div class="grid gap-2 sm:grid-cols-2">
+              <div>
+                <label class="block text-xs text-slate-400 mb-1">Twelve Data 무료 API Key (선택)</label>
+                <input id="twelveDataKey" type="password" placeholder="예: a1b2c3d4e5..." onchange="saveApiSettings()" class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-white focus:border-sky-500 focus:outline-none" />
+              </div>
+              <div>
+                <label class="block text-xs text-slate-400 mb-1">QQQ → 선물지수 환산 배수</label>
+                <input id="qqqMultiplier" type="number" step="0.01" value="40.95" onchange="saveApiSettings()" class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-white tabular-nums focus:border-sky-500 focus:outline-none" />
+              </div>
+            </div>
+            <p id="apiStatusNote" class="text-[11px] text-slate-500">
+              * API 키가 없어도 상단 [장마감 시세 불러오기] 클릭 시 원/달러 실시간 환율은 즉시 업데이트되며, 선물 지수는 아래 입력칸에서 1초 만에 수정 가능합니다.
+            </p>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <!-- 2. 기준 시세 & 환율 바 (즉시 수정 가능) -->
+    <section class="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2">
+      <!-- 미니 나스닥100 선물 지수 -->
+      <div class="rounded-2xl border border-slate-800 bg-slate-900/70 p-4 sm:p-5 shadow-lg">
+        <div class="flex items-center justify-between mb-2">
+          <label for="nasdaqIndex" class="text-xs sm:text-sm font-semibold text-slate-300 flex items-center gap-2">
+            <span class="inline-block h-2 w-2 rounded-full bg-sky-400"></span>
+            미니 나스닥100 선물 지수 (NQ / MNQ 기준)
+          </label>
+          <span id="indexSourceTag" class="rounded-md bg-slate-800 px-2 py-0.5 text-[11px] font-medium text-slate-400">수동/기본값</span>
+        </div>
+        <div class="flex items-center gap-3">
+          <div class="relative flex-1">
+            <input id="nasdaqIndex" type="number" step="0.25" value="24550.00" oninput="recalculate()" class="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-xl sm:text-2xl font-bold text-white tabular-nums focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 focus:outline-none" />
+            <span class="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-500">pt</span>
+          </div>
+          <div class="text-right text-xs text-slate-400 shrink-0">
+            <div>MNQ 1계약 명목가치</div>
+            <div id="mnqNotionalUnit" class="mt-0.5 text-sm font-bold text-sky-400 tabular-nums">$49,100</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 원/달러 환율 -->
+      <div class="rounded-2xl border border-slate-800 bg-slate-900/70 p-4 sm:p-5 shadow-lg">
+        <div class="flex items-center justify-between mb-2">
+          <label for="usdKrwRate" class="text-xs sm:text-sm font-semibold text-slate-300 flex items-center gap-2">
+            <span class="inline-block h-2 w-2 rounded-full bg-emerald-400"></span>
+            원/달러 환율 (USD/KRW)
+          </label>
+          <span id="fxSourceTag" class="rounded-md bg-slate-800 px-2 py-0.5 text-[11px] font-medium text-slate-400">수동/기본값</span>
+        </div>
+        <div class="flex items-center gap-3">
+          <div class="relative flex-1">
+            <input id="usdKrwRate" type="number" step="0.1" value="1395.0" oninput="recalculate()" class="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-xl sm:text-2xl font-bold text-white tabular-nums focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none" />
+            <span class="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-500">원 / $1</span>
+          </div>
+          <div class="text-right text-xs text-slate-400 shrink-0">
+            <div>MNQ 1계약 원화 환산</div>
+            <div id="mnqNotionalUnitKrw" class="mt-0.5 text-sm font-bold text-emerald-400 tabular-nums">6,849만 원</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 3. 핵심 계산 결과 KPI 4종 카드 -->
+    <section class="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <!-- KPI 1: 현재 실질 레버리지 -->
+      <div class="rounded-2xl border border-slate-800 bg-gradient-to-b from-slate-900 to-slate-900/60 p-5 shadow-xl">
+        <div class="flex items-center justify-between">
+          <span class="text-xs font-semibold uppercase tracking-wider text-slate-400">현재 실질 레버리지</span>
+          <span id="leverageStatusPill" class="rounded-full bg-emerald-500/15 px-2.5 py-0.5 text-xs font-semibold text-emerald-400 border border-emerald-500/30">
+            적정 범위 내
+          </span>
+        </div>
+        <div class="mt-3 flex items-baseline gap-2.5">
+          <span id="kpiActualLeverage" class="text-3xl sm:text-4xl font-extrabold tracking-tight text-white tabular-nums">3.00x</span>
+          <span class="text-xs text-slate-400 tabular-nums">목표 <strong id="kpiTargetLeverageLabel" class="text-slate-200">3.00x</strong></span>
+        </div>
+        <div class="mt-3 flex items-center justify-between text-xs text-slate-400 border-t border-slate-800/80 pt-2.5">
+          <span>목표 대비 괴리</span>
+          <span id="kpiLeverageDiff" class="font-semibold text-slate-200 tabular-nums">0.00x (0.0%)</span>
+        </div>
+      </div>
+
+      <!-- KPI 2: 총 순자산 & 총 명목 노출액 -->
+      <div class="rounded-2xl border border-slate-800 bg-gradient-to-b from-slate-900 to-slate-900/60 p-5 shadow-xl">
+        <div class="flex items-center justify-between">
+          <span class="text-xs font-semibold uppercase tracking-wider text-slate-400">총 순자산 (Net Equity)</span>
+          <span class="text-xs text-slate-500">RP + 예탁금 + 주식</span>
+        </div>
+        <div class="mt-3">
+          <div id="kpiNetEquityKrw" class="text-2xl sm:text-3xl font-extrabold tracking-tight text-white tabular-nums">1억 1,278만 원</div>
+          <div id="kpiNetEquityUsd" class="mt-0.5 text-xs font-medium text-slate-400 tabular-nums">$80,842 USD</div>
+        </div>
+        <div class="mt-2.5 flex items-center justify-between text-xs text-slate-400 border-t border-slate-800/80 pt-2.5">
+          <span>총 명목 노출액</span>
+          <span id="kpiTotalExposure" class="font-semibold text-sky-300 tabular-nums">$320,500 (4.47억)</span>
+        </div>
+      </div>
+
+      <!-- KPI 3: 오늘의 리밸런싱 액션 가이드 -->
+      <div id="actionCard" class="rounded-2xl border border-sky-500/30 bg-gradient-to-b from-sky-950/40 to-slate-900/80 p-5 shadow-xl">
+        <div class="flex items-center justify-between">
+          <span class="text-xs font-semibold uppercase tracking-wider text-sky-300">오늘의 리밸런싱 가이드</span>
+          <span id="actionBadge" class="rounded-md bg-sky-500/20 px-2 py-0.5 text-[11px] font-bold text-sky-300">유지</span>
+        </div>
+        <div class="mt-3">
+          <div id="kpiActionHeadline" class="text-xl sm:text-2xl font-extrabold tracking-tight text-white">
+            조정 불필요 (유지)
+          </div>
+          <div id="kpiActionExact" class="mt-1 text-xs text-slate-300 tabular-nums">
+            정밀 계산: 0.00 MNQ 계약
+          </div>
+        </div>
+        <div class="mt-2.5 flex items-center justify-between text-xs text-slate-400 border-t border-slate-800/80 pt-2.5">
+          <span>노출액 과부족</span>
+          <span id="kpiExposureGap" class="font-semibold text-slate-200 tabular-nums">$0 (0만 원)</span>
+        </div>
+      </div>
+
+      <!-- KPI 4: 증거금 & 안전 버퍼 진단 -->
+      <div class="rounded-2xl border border-slate-800 bg-gradient-to-b from-slate-900 to-slate-900/60 p-5 shadow-xl">
+        <div class="flex items-center justify-between">
+          <span class="text-xs font-semibold uppercase tracking-wider text-slate-400">선물 증거금 안전 버퍼</span>
+          <span id="marginStatusPill" class="rounded-full bg-emerald-500/15 px-2.5 py-0.5 text-xs font-semibold text-emerald-400 border border-emerald-500/30">
+            안전
+          </span>
+        </div>
+        <div class="mt-3 flex items-baseline gap-2">
+          <span id="kpiMarginRatio" class="text-2xl sm:text-3xl font-extrabold tracking-tight text-white tabular-nums">52.5%</span>
+          <span class="text-xs text-slate-400">유지증거금 점유율</span>
+        </div>
+        <div class="mt-2.5 flex items-center justify-between text-xs text-slate-400 border-t border-slate-800/80 pt-2.5">
+          <span>선물예탁금 내구력</span>
+          <span id="kpiDrawdownBuffer" class="font-semibold text-emerald-400 tabular-nums">지수 -3.8% 하락까지 버팀</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- 4. 메인 2단 그리드: 좌측 입력 패널 / 우측 시각화 & 스트레스 테스트 -->
+    <div class="grid grid-cols-1 gap-6 lg:grid-cols-12">
+
+      <!-- 좌측 5컬럼: 내 계좌 & 포지션 설정 -->
+      <div class="lg:col-span-5 space-y-6">
+        <div class="rounded-2xl border border-slate-800 bg-slate-900/75 p-5 sm:p-6 shadow-xl">
+          <div class="flex items-center justify-between border-b border-slate-800 pb-3.5 mb-5">
+            <h2 class="text-base sm:text-lg font-bold text-white flex items-center gap-2">
+              <span>💼 내 계좌 &amp; 포지션 입력</span>
+            </h2>
+            <span class="text-[11px] text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-md border border-emerald-500/20">자동 저장됨</span>
+          </div>
+
+          <!-- A. 자산 구성 -->
+          <div class="space-y-4">
+            <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400">1. 순자산 및 현금·RP 구성</h3>
+
+            <!-- 원화 RP / 예수금 -->
+            <div>
+              <div class="flex justify-between text-xs mb-1.5">
+                <label for="krwRpInput" class="font-medium text-slate-300">원화 RP / 파킹통장 / 예수금</label>
+                <span id="krwRpUsdHelper" class="text-slate-400 tabular-nums">≈ $35,842</span>
+              </div>
+              <div class="relative">
+                <input id="krwRpInput" type="number" step="10" value="5000" oninput="recalculate()" class="w-full rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2.5 text-base font-semibold text-white tabular-nums focus:border-sky-500 focus:outline-none" />
+                <span class="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-medium text-slate-400">만 원</span>
+              </div>
+            </div>
+
+            <!-- 선물 계좌 예탁금 -->
+            <div>
+              <div class="flex justify-between items-center text-xs mb-1.5">
+                <label for="futuresCashInput" class="font-medium text-slate-300">해외선물 계좌 예탁금</label>
+                <div class="flex items-center gap-1 rounded-lg bg-slate-950 p-0.5 border border-slate-800">
+                  <button type="button" id="btnCashUsd" onclick="setFuturesCashCurrency('USD')" class="rounded-md bg-sky-600 px-2 py-0.5 text-[11px] font-semibold text-white cursor-pointer">USD ($)</button>
+                  <button type="button" id="btnCashKrw" onclick="setFuturesCashCurrency('KRW')" class="rounded-md px-2 py-0.5 text-[11px] font-medium text-slate-400 hover:text-white cursor-pointer">만 원</button>
+                </div>
+              </div>
+              <div class="relative">
+                <input id="futuresCashInput" type="number" step="100" value="20000" oninput="recalculate()" class="w-full rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2.5 text-base font-semibold text-white tabular-nums focus:border-sky-500 focus:outline-none" />
+                <span id="futuresCashUnitLabel" class="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-medium text-slate-400">USD</span>
+              </div>
+              <p id="futuresCashAltHelper" class="mt-1 text-[11px] text-slate-500 tabular-nums">원화 환산: 약 2,790만 원</p>
+            </div>
+
+            <!-- TQQQ & 기타 주식 평가액 -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <div class="flex justify-between text-xs mb-1.5">
+                  <label for="tqqqUsdInput" class="font-medium text-slate-300">TQQQ 평가액 (3x)</label>
+                </div>
+                <div class="relative">
+                  <input id="tqqqUsdInput" type="number" step="100" value="25000" oninput="recalculate()" class="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm font-semibold text-white tabular-nums focus:border-sky-500 focus:outline-none" />
+                  <span class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[11px] text-slate-400">USD</span>
+                </div>
+              </div>
+
+              <div>
+                <div class="flex justify-between text-xs mb-1.5">
+                  <label for="otherStockUsdInput" class="font-medium text-slate-300">기타 1x 현물주식</label>
+                </div>
+                <div class="relative">
+                  <input id="otherStockUsdInput" type="number" step="100" value="0" oninput="recalculate()" class="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm font-semibold text-white tabular-nums focus:border-sky-500 focus:outline-none" />
+                  <span class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[11px] text-slate-400">USD</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <hr class="my-5 border-slate-800" />
+
+          <!-- B. 선물 보유 계약 수 -->
+          <div class="space-y-4">
+            <div class="flex items-center justify-between">
+              <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400">2. 나스닥100 선물 보유 계약</h3>
+              <span class="text-[11px] text-slate-500">매도는 음수(-) 입력 가능</span>
+            </div>
+
+            <!-- MNQ 계약 수 -->
+            <div class="rounded-xl border border-slate-800 bg-slate-950/70 p-3.5">
+              <div class="flex items-center justify-between">
+                <div>
+                  <div class="text-sm font-bold text-white">마이크로 나스닥100 (MNQ)</div>
+                  <div class="text-xs text-slate-400">승수 $2 × 지수 · 소수점 미세조정용</div>
+                </div>
+                <div class="flex items-center gap-1.5">
+                  <button type="button" onclick="adjustContract('mnqContracts', -1)" class="h-9 w-9 rounded-lg border border-slate-700 bg-slate-800 hover:bg-slate-700 text-lg font-bold text-slate-200 transition cursor-pointer">-</button>
+                  <input id="mnqContracts" type="number" step="1" value="5" oninput="recalculate()" class="w-16 rounded-lg border border-slate-700 bg-slate-900 py-1.5 text-center text-base font-bold text-sky-400 tabular-nums focus:border-sky-500 focus:outline-none" />
+                  <button type="button" onclick="adjustContract('mnqContracts', 1)" class="h-9 w-9 rounded-lg border border-slate-700 bg-slate-800 hover:bg-slate-700 text-lg font-bold text-slate-200 transition cursor-pointer">+</button>
+                </div>
+              </div>
+              <div class="mt-2 flex justify-between text-xs text-slate-400 border-t border-slate-800/80 pt-2 tabular-nums">
+                <span>MNQ 명목 노출액</span>
+                <span id="mnqTotalExposureText" class="font-semibold text-slate-200">$245,500 (3억 4,247만 원)</span>
+              </div>
+            </div>
+
+            <!-- NQ 계약 수 -->
+            <div class="rounded-xl border border-slate-800 bg-slate-950/70 p-3.5">
+              <div class="flex items-center justify-between">
+                <div>
+                  <div class="text-sm font-bold text-white">E-mini 나스닥100 (NQ)</div>
+                  <div class="text-xs text-slate-400">승수 $20 × 지수 (MNQ의 10배)</div>
+                </div>
+                <div class="flex items-center gap-1.5">
+                  <button type="button" onclick="adjustContract('nqContracts', -1)" class="h-9 w-9 rounded-lg border border-slate-700 bg-slate-800 hover:bg-slate-700 text-lg font-bold text-slate-200 transition cursor-pointer">-</button>
+                  <input id="nqContracts" type="number" step="1" value="0" oninput="recalculate()" class="w-16 rounded-lg border border-slate-700 bg-slate-900 py-1.5 text-center text-base font-bold text-indigo-400 tabular-nums focus:border-sky-500 focus:outline-none" />
+                  <button type="button" onclick="adjustContract('nqContracts', 1)" class="h-9 w-9 rounded-lg border border-slate-700 bg-slate-800 hover:bg-slate-700 text-lg font-bold text-slate-200 transition cursor-pointer">+</button>
+                </div>
+              </div>
+              <div class="mt-2 flex justify-between text-xs text-slate-400 border-t border-slate-800/80 pt-2 tabular-nums">
+                <span>NQ 명목 노출액</span>
+                <span id="nqTotalExposureText" class="font-semibold text-slate-200">$0 (0만 원)</span>
+              </div>
+            </div>
+          </div>
+
+          <hr class="my-5 border-slate-800" />
+
+          <!-- C. 목표 레버리지 & 허용 오차 -->
+          <div class="space-y-4">
+            <div class="flex items-center justify-between">
+              <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400">3. 목표 레버리지 &amp; 리밸런싱 밴드</h3>
+              <span id="targetMultiplierBadge" class="text-sm font-extrabold text-sky-400 tabular-nums">3.00x</span>
+            </div>
+
+            <input id="targetLeverageSlider" type="range" min="1.0" max="6.0" step="0.1" value="3.0" oninput="syncTargetLeverage(this.value)" class="w-full" />
+
+            <div class="grid grid-cols-4 gap-2">
+              <button type="button" onclick="syncTargetLeverage(2.0)" class="rounded-lg border border-slate-700 bg-slate-800/80 hover:bg-slate-700 py-1.5 text-xs font-semibold text-slate-200 transition cursor-pointer">2.0x</button>
+              <button type="button" onclick="syncTargetLeverage(3.0)" class="rounded-lg border border-sky-500/40 bg-sky-500/15 hover:bg-sky-500/25 py-1.5 text-xs font-semibold text-sky-300 transition cursor-pointer">3.0x</button>
+              <button type="button" onclick="syncTargetLeverage(4.0)" class="rounded-lg border border-slate-700 bg-slate-800/80 hover:bg-slate-700 py-1.5 text-xs font-semibold text-slate-200 transition cursor-pointer">4.0x</button>
+              <button type="button" onclick="syncTargetLeverage(5.0)" class="rounded-lg border border-slate-700 bg-slate-800/80 hover:bg-slate-700 py-1.5 text-xs font-semibold text-slate-200 transition cursor-pointer">5.0x</button>
+            </div>
+
+            <div class="grid grid-cols-2 gap-3 pt-1">
+              <div>
+                <label for="rebalanceBufferPct" class="block text-xs text-slate-400 mb-1">리밸런싱 허용 밴드 (±%)</label>
+                <div class="relative">
+                  <input id="rebalanceBufferPct" type="number" step="1" min="0" max="50" value="5" oninput="recalculate()" class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-xs font-semibold text-white tabular-nums focus:border-sky-500 focus:outline-none" />
+                  <span class="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-[11px] text-slate-500">%</span>
+                </div>
+              </div>
+              <div>
+                <label for="mnqMaintMargin" class="block text-xs text-slate-400 mb-1">MNQ 1계약 유지증거금</label>
+                <div class="relative">
+                  <input id="mnqMaintMargin" type="number" step="100" min="500" value="2100" oninput="recalculate()" class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-xs font-semibold text-white tabular-nums focus:border-sky-500 focus:outline-none" />
+                  <span class="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-[11px] text-slate-500">USD</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 우측 7컬럼: 포트폴리오 시각화 + 지수 스트레스 테스트 + 매매일지 복사 -->
+      <div class="lg:col-span-7 space-y-6">
+
+        <!-- 시각화 1: 노출액 구성 및 순자산 대비 바 -->
+        <div class="rounded-2xl border border-slate-800 bg-slate-900/75 p-5 sm:p-6 shadow-xl">
+          <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-4">
+            <div>
+              <h2 class="text-base sm:text-lg font-bold text-white">📊 자산 대비 레버리지 노출 구조</h2>
+              <p class="text-xs text-slate-400 mt-0.5">순자산(1.0x 기준선) 대비 현재 선물·ETF 실질 시장 노출 비율</p>
+            </div>
+            <button onclick="copyDailySummary()" class="inline-flex items-center justify-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800 hover:bg-slate-700 px-3.5 py-2 text-xs font-semibold text-slate-100 transition cursor-pointer shrink-0">
+              <svg class="h-3.5 w-3.5 text-sky-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+              </svg>
+              <span>오늘 리밸런싱 요약 복사</span>
+            </button>
+          </div>
+
+          <!-- 누적 바 차트 (순수 CSS) -->
+          <div class="space-y-4">
+            <!-- 기준 순자산 바 -->
+            <div>
+              <div class="flex justify-between text-xs mb-1.5 tabular-nums">
+                <span class="font-medium text-slate-300">내 순자산 (1.00x 기준)</span>
+                <span id="barNetEquityLabel" class="font-semibold text-slate-200">$80,842 (1억 1,278만 원)</span>
+              </div>
+              <div class="h-4 w-full rounded-full bg-slate-950 p-0.5 border border-slate-800 overflow-hidden">
+                <div id="barNetEquityFill" class="h-full rounded-full bg-slate-500 transition-all duration-300" style="width: 33.3%"></div>
+              </div>
+            </div>
+
+            <!-- 목표 노출액 바 -->
+            <div>
+              <div class="flex justify-between text-xs mb-1.5 tabular-nums">
+                <span class="font-medium text-sky-300">목표 노출액 (<span id="barTargetMultText">3.00x</span>)</span>
+                <span id="barTargetExposureLabel" class="font-semibold text-sky-300">$242,527 (3억 3,833만 원)</span>
+              </div>
+              <div class="h-4 w-full rounded-full bg-slate-950 p-0.5 border border-slate-800 overflow-hidden">
+                <div id="barTargetExposureFill" class="h-full rounded-full bg-sky-500/60 border border-sky-400/50 transition-all duration-300" style="width: 85%"></div>
+              </div>
+            </div>
+
+            <!-- 현재 실질 노출액 스택 바 -->
+            <div>
+              <div class="flex justify-between text-xs mb-1.5 tabular-nums">
+                <span class="font-medium text-white">현재 실질 노출액 (<span id="barActualMultText">3.96x</span>)</span>
+                <span id="barActualExposureLabel" class="font-semibold text-white">$320,500 (4억 4,710만 원)</span>
+              </div>
+              <div class="h-6 w-full rounded-full bg-slate-950 p-0.5 border border-slate-800 flex overflow-hidden">
+                <div id="segMnq" class="h-full bg-sky-500 transition-all duration-300 first:rounded-l-full last:rounded-r-full" style="width: 65%" title="MNQ 노출"></div>
+                <div id="segNq" class="h-full bg-indigo-500 transition-all duration-300 first:rounded-l-full last:rounded-r-full" style="width: 0%" title="NQ 노출"></div>
+                <div id="segTqqq" class="h-full bg-emerald-500 transition-all duration-300 first:rounded-l-full last:rounded-r-full" style="width: 35%" title="TQQQ 3x 환산 노출"></div>
+                <div id="segOther" class="h-full bg-amber-500 transition-all duration-300 first:rounded-l-full last:rounded-r-full" style="width: 0%" title="기타 1x 주식 노출"></div>
+              </div>
+            </div>
+
+            <!-- 범례 및 비중 상세 -->
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-2">
+              <div class="rounded-xl bg-slate-950/70 border border-slate-800/80 p-2.5">
+                <div class="flex items-center gap-1.5 text-[11px] text-slate-400">
+                  <span class="h-2.5 w-2.5 rounded-sm bg-sky-500"></span>
+                  <span>MNQ 선물</span>
+                </div>
+                <div id="legendMnq" class="mt-1 text-xs font-bold text-white tabular-nums">$245,500 (76.6%)</div>
+              </div>
+              <div class="rounded-xl bg-slate-950/70 border border-slate-800/80 p-2.5">
+                <div class="flex items-center gap-1.5 text-[11px] text-slate-400">
+                  <span class="h-2.5 w-2.5 rounded-sm bg-indigo-500"></span>
+                  <span>NQ 선물</span>
+                </div>
+                <div id="legendNq" class="mt-1 text-xs font-bold text-white tabular-nums">$0 (0.0%)</div>
+              </div>
+              <div class="rounded-xl bg-slate-950/70 border border-slate-800/80 p-2.5">
+                <div class="flex items-center gap-1.5 text-[11px] text-slate-400">
+                  <span class="h-2.5 w-2.5 rounded-sm bg-emerald-500"></span>
+                  <span>TQQQ (×3)</span>
+                </div>
+                <div id="legendTqqq" class="mt-1 text-xs font-bold text-white tabular-nums">$75,000 (23.4%)</div>
+              </div>
+              <div class="rounded-xl bg-slate-950/70 border border-slate-800/80 p-2.5">
+                <div class="flex items-center gap-1.5 text-[11px] text-slate-400">
+                  <span class="h-2.5 w-2.5 rounded-sm bg-amber-500"></span>
+                  <span>기타 현물 (×1)</span>
+                </div>
+                <div id="legendOther" class="mt-1 text-xs font-bold text-white tabular-nums">$0 (0.0%)</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 시각화 2: 나스닥 지수 변동 스트레스 테스트 시뮬레이터 -->
+        <div class="rounded-2xl border border-slate-800 bg-slate-900/75 p-5 sm:p-6 shadow-xl">
+          <div class="flex flex-wrap items-center justify-between gap-2 mb-4">
+            <div>
+              <h2 class="text-base sm:text-lg font-bold text-white flex items-center gap-2">
+                <span>⚡ 나스닥 지수 변동 스트레스 테스트</span>
+              </h2>
+              <p class="text-xs text-slate-400 mt-0.5">오늘 밤 나스닥이 급등락할 경우 내 순자산·레버리지·필요 조정 계약 수 미리보기</p>
+            </div>
+            <button type="button" onclick="setStressShock(0)" class="rounded-lg border border-slate-700 bg-slate-800 hover:bg-slate-700 px-2.5 py-1 text-xs font-medium text-slate-300 cursor-pointer">
+              0% 초기화
+            </button>
+          </div>
+
+          <!-- 충격 슬라이더 & 프리셋 버튼 -->
+          <div class="rounded-xl border border-slate-800 bg-slate-950/80 p-4 mb-4">
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-xs font-medium text-slate-400">가상 지수 등락률 시나리오</span>
+              <div class="flex items-center gap-2">
+                <span id="stressShockPctLabel" class="text-base font-extrabold text-sky-400 tabular-nums">0.0%</span>
+                <span id="stressSimulatedIndexLabel" class="text-xs text-slate-400 tabular-nums">(24,550.00 pt)</span>
+              </div>
+            </div>
+
+            <input id="stressSlider" type="range" min="-15" max="15" step="0.5" value="0" oninput="setStressShock(this.value)" class="w-full my-2" />
+
+            <div class="grid grid-cols-5 gap-2 mt-2">
+              <button type="button" onclick="setStressShock(-10)" class="rounded-lg bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/25 py-1.5 text-xs font-semibold text-rose-300 transition cursor-pointer">-10% 폭락</button>
+              <button type="button" onclick="setStressShock(-5)" class="rounded-lg bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/25 py-1.5 text-xs font-semibold text-rose-300 transition cursor-pointer">-5% 하락</button>
+              <button type="button" onclick="setStressShock(0)" class="rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 py-1.5 text-xs font-semibold text-slate-200 transition cursor-pointer">현재 (0%)</button>
+              <button type="button" onclick="setStressShock(5)" class="rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/25 py-1.5 text-xs font-semibold text-emerald-300 transition cursor-pointer">+5% 상승</button>
+              <button type="button" onclick="setStressShock(10)" class="rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/25 py-1.5 text-xs font-semibold text-emerald-300 transition cursor-pointer">+10% 급등</button>
+            </div>
+          </div>
+
+          <!-- 시뮬레이션 결과 3열 그리드 -->
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div class="rounded-xl border border-slate-800 bg-slate-950/60 p-3.5">
+              <div class="text-xs text-slate-400">예상 순자산 변화</div>
+              <div id="simNetEquity" class="mt-1 text-base sm:text-lg font-bold text-white tabular-nums">1억 1,278만 원</div>
+              <div id="simPnlDelta" class="mt-0.5 text-xs font-medium text-slate-400 tabular-nums">변동: 0만 원 ($0)</div>
+            </div>
+
+            <div class="rounded-xl border border-slate-800 bg-slate-950/60 p-3.5">
+              <div class="text-xs text-slate-400">예상 실질 레버리지</div>
+              <div id="simLeverage" class="mt-1 text-base sm:text-lg font-bold text-sky-300 tabular-nums">3.96x</div>
+              <div id="simFuturesCash" class="mt-0.5 text-xs text-slate-400 tabular-nums">선물예탁금: $20,000</div>
+            </div>
+
+            <div class="rounded-xl border border-slate-800 bg-slate-950/60 p-3.5">
+              <div class="text-xs text-slate-400">시나리오 발생 시 액션</div>
+              <div id="simAction" class="mt-1 text-sm sm:text-base font-bold text-amber-300">MNQ 2계약 매도</div>
+              <div id="simMarginNote" class="mt-0.5 text-xs text-slate-400 tabular-nums">증거금 점유율: 52.5%</div>
+            </div>
+          </div>
+
+          <!-- 3배 레버리지 리밸런싱 원리 요약 팁 -->
+          <div class="mt-4 rounded-xl bg-slate-950/50 border border-slate-800/80 p-3 text-xs text-slate-400 leading-relaxed">
+            <strong class="text-slate-200">💡 레버리지 리밸런싱 원리:</strong> 지수가 하락하면 순자산이 노출액보다 더 빠르게 줄어들어 <strong>실질 레버리지 배율이 오히려 상승</strong>합니다(따라서 하락장에서는 계약을 일부 축소해야 목표 배율이 유지됨). 반대로 지수가 상승하면 순자산이 불어나 레버리지 배율이 낮아지므로 계약을 추가 매수하게 됩니다.
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- 클립보드 복사 폴백용 숨김 영역 -->
+    <textarea id="clipboardFallback" class="sr-only" aria-hidden="true"></textarea>
+  </div>
+
+  <script>
+    // =========================================================================
+    // 1. 상태 관리 및 기본값 정의 (localStorage 자동 영속화)
+    // =========================================================================
+    const STORAGE_KEY = 'nasdaq100_leverage_dashboard_v1';
+
+    const DEFAULT_STATE = {
+      nasdaqIndex: 24550.00,
+      usdKrwRate: 1395.0,
+      krwRpManwon: 5000,         // 5,000만 원
+      futuresCash: 20000,        // 기본 20,000 USD
+      futuresCashCurrency: 'USD',
+      tqqqUsd: 25000,            // $25,000
+      otherStockUsd: 0,          // $0
+      mnqContracts: 5,           // 5계약
+      nqContracts: 0,            // 0계약
+      targetLeverage: 3.0,       // 목표 3.0배
+      rebalanceBufferPct: 5,     // ±5% 허용 밴드
+      mnqMaintMargin: 2100,      // MNQ 1계약 유지증거금 $2,100
+      twelveDataKey: '',
+      qqqMultiplier: 40.95,
+      lastUpdated: '기본 샘플 데이터'
+    };
+
+    let state = { ...DEFAULT_STATE };
+    let currentStressShockPct = 0;
+
+    // 페이지 로드 시 저장된 데이터 복원
+    window.addEventListener('DOMContentLoaded', () => {
+      loadStateFromStorage();
+      applyStateToInputs();
+      recalculate();
+    });
+
+    function loadStateFromStorage() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          state = { ...DEFAULT_STATE, ...parsed };
+        }
+      } catch (err) {
+        console.warn('로컬 스토리지 로드 실패:', err);
+      }
+    }
+
+    function saveStateToStorage() {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      } catch (err) {
+        console.warn('로컬 스토리지 저장 실패:', err);
+      }
+    }
+
+    function applyStateToInputs() {
+      document.getElementById('nasdaqIndex').value = state.nasdaqIndex;
+      document.getElementById('usdKrwRate').value = state.usdKrwRate;
+      document.getElementById('krwRpInput').value = state.krwRpManwon;
+      document.getElementById('futuresCashInput').value = state.futuresCash;
+      document.getElementById('tqqqUsdInput').value = state.tqqqUsd;
+      document.getElementById('otherStockUsdInput').value = state.otherStockUsd;
+      document.getElementById('mnqContracts').value = state.mnqContracts;
+      document.getElementById('nqContracts').value = state.nqContracts;
+      document.getElementById('targetLeverageSlider').value = state.targetLeverage;
+      document.getElementById('rebalanceBufferPct').value = state.rebalanceBufferPct;
+      document.getElementById('mnqMaintMargin').value = state.mnqMaintMargin;
+      document.getElementById('twelveDataKey').value = state.twelveDataKey || '';
+      document.getElementById('qqqMultiplier').value = state.qqqMultiplier || 40.95;
+      document.getElementById('lastUpdatedBadge').textContent = `업데이트: ${state.lastUpdated}`;
+
+      updateFuturesCurrencyButtons();
+    }
+
+    function resetDefaults() {
+      state = { ...DEFAULT_STATE };
+      currentStressShockPct = 0;
+      document.getElementById('stressSlider').value = 0;
+      applyStateToInputs();
+      saveStateToStorage();
+      recalculate();
+      showToast('초기화 완료', '모든 계좌 잔고와 설정값이 기본 예시 값으로 초기화되었습니다.', '🔄');
+    }
+
+    // =========================================================================
+    // 2. 무료 시세 & 환율 불러오기 (장마감 1회 조회용)
+    // =========================================================================
+    async function fetchMarketData() {
+      const btn = document.getElementById('fetchMarketBtn');
+      const spinner = document.getElementById('fetchSpinner');
+      const icon = document.getElementById('fetchIcon');
+
+      btn.disabled = true;
+      btn.classList.add('opacity-75');
+      spinner.classList.remove('hidden');
+      icon.classList.add('hidden');
+
+      let fxSuccess = false;
+      let indexSuccess = false;
+      let fetchedMessages = [];
+
+      // (1) 무료 공개 환율 API 조회 (CORS 허용, API 키 불필요)
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 4500);
+        const fxRes = await fetch('https://open.er-api.com/v6/latest/USD', { signal: controller.signal });
+        clearTimeout(timeoutId);
+
+        if (fxRes.ok) {
+          const fxData = await fxRes.json();
+          if (fxData && fxData.rates && fxData.rates.KRW) {
+            const liveKrw = Number(fxData.rates.KRW.toFixed(1));
+            state.usdKrwRate = liveKrw;
+            document.getElementById('usdKrwRate').value = liveKrw;
+            document.getElementById('fxSourceTag').textContent = '실시간 피드 반영';
+            document.getElementById('fxSourceTag').className = 'rounded-md bg-emerald-500/20 px-2 py-0.5 text-[11px] font-semibold text-emerald-300';
+            fxSuccess = true;
+            fetchedMessages.push(`원/달러 환율 ${liveKrw.toLocaleString()}원`);
+          }
+        }
+      } catch (e) {
+        console.warn('환율 피드 조회 제한/시간초과:', e);
+      }
+
+      // (2) 사용자 입력 Twelve Data API 키가 있는 경우 QQQ 종가 조회 후 선물 지수 환산
+      const apiKey = (document.getElementById('twelveDataKey').value || '').trim();
+      const mult = parseFloat(document.getElementById('qqqMultiplier').value) || 40.95;
+
+      if (apiKey) {
+        try {
+          const controller2 = new AbortController();
+          const timeoutId2 = setTimeout(() => controller2.abort(), 4500);
+          const qqqRes = await fetch(`https://api.twelvedata.com/price?symbol=QQQ&apikey=${encodeURIComponent(apiKey)}`, { signal: controller2.signal });
+          clearTimeout(timeoutId2);
+
+          if (qqqRes.ok) {
+            const qqqData = await qqqRes.json();
+            if (qqqData && qqqData.price) {
+              const estIndex = Number((parseFloat(qqqData.price) * mult).toFixed(2));
+              state.nasdaqIndex = estIndex;
+              document.getElementById('nasdaqIndex').value = estIndex;
+              document.getElementById('indexSourceTag').textContent = `QQQ(${qqqData.price}) 환산`;
+              document.getElementById('indexSourceTag').className = 'rounded-md bg-sky-500/20 px-2 py-0.5 text-[11px] font-semibold text-sky-300';
+              indexSuccess = true;
+              fetchedMessages.push(`나스닥 환산지수 ${estIndex.toLocaleString()}pt`);
+            }
+          }
+        } catch (e) {
+          console.warn('Twelve Data 조회 오류:', e);
+        }
+      }
+
+      // 타임스탬프 업데이트
+      const now = new Date();
+      const timeStr = `${now.getMonth() + 1}/${now.getDate()} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+      state.lastUpdated = timeStr;
+      document.getElementById('lastUpdatedBadge').textContent = `업데이트: ${timeStr}`;
+
+      recalculate();
+
+      btn.disabled = false;
+      btn.classList.remove('opacity-75');
+      spinner.classList.add('hidden');
+      icon.classList.remove('hidden');
+
+      if (fxSuccess && indexSuccess) {
+        showToast('장마감 시세 & 환율 갱신 완료', fetchedMessages.join(' · ') + ' 반영되었습니다.', '✅');
+      } else if (fxSuccess && !indexSuccess) {
+        showToast(
+          '환율 자동 갱신 완료',
+          `${fetchedMessages[0]}이(가) 반영되었습니다. 선물 지수는 입력칸에서 바로 수정하거나 [0원 배포 & API 가이드]에 무료 키를 등록해 보세요.`,
+          '💱'
+        );
+      } else {
+        showToast(
+          '오프라인 / 샌드박스 안내',
+          '외부 시세 피드 연결이 제한된 환경입니다. 아래 지수·환율 입력칸에 숫자를 직접 입력하시면 즉시 모든 지표가 계산됩니다.',
+          'ℹ️'
+        );
+      }
+    }
+
+    function saveApiSettings() {
+      state.twelveDataKey = document.getElementById('twelveDataKey').value.trim();
+      state.qqqMultiplier = parseFloat(document.getElementById('qqqMultiplier').value) || 40.95;
+      saveStateToStorage();
+      showToast('API 설정 저장됨', '브라우저 로컬 저장소에 안전하게 저장되었습니다.', '🔑');
+    }
+
+    function toggleGuide() {
+      const panel = document.getElementById('guidePanel');
+      const chevron = document.getElementById('guideChevron');
+      panel.classList.toggle('hidden');
+      chevron.classList.toggle('rotate-180');
+    }
+
+    // =========================================================================
+    // 3. 입력 컨트롤 헬퍼 함수
+    // =========================================================================
+    function setFuturesCashCurrency(curr) {
+      if (state.futuresCashCurrency === curr) return;
+      const fx = parseFloat(document.getElementById('usdKrwRate').value) || 1395;
+      const currentVal = parseFloat(document.getElementById('futuresCashInput').value) || 0;
+
+      if (curr === 'KRW') {
+        // USD -> 만 원 변환
+        const manwon = Math.round((currentVal * fx) / 10000);
+        document.getElementById('futuresCashInput').value = manwon;
+      } else {
+        // 만 원 -> USD 변환
+        const usd = Math.round((currentVal * 10000) / fx);
+        document.getElementById('futuresCashInput').value = usd;
+      }
+      state.futuresCashCurrency = curr;
+      updateFuturesCurrencyButtons();
+      recalculate();
+    }
+
+    function updateFuturesCurrencyButtons() {
+      const isUsd = state.futuresCashCurrency === 'USD';
+      const btnUsd = document.getElementById('btnCashUsd');
+      const btnKrw = document.getElementById('btnCashKrw');
+      const unitLabel = document.getElementById('futuresCashUnitLabel');
+
+      if (isUsd) {
+        btnUsd.className = 'rounded-md bg-sky-600 px-2 py-0.5 text-[11px] font-semibold text-white cursor-pointer';
+        btnKrw.className = 'rounded-md px-2 py-0.5 text-[11px] font-medium text-slate-400 hover:text-white cursor-pointer';
+        unitLabel.textContent = 'USD';
+      } else {
+        btnKrw.className = 'rounded-md bg-sky-600 px-2 py-0.5 text-[11px] font-semibold text-white cursor-pointer';
+        btnUsd.className = 'rounded-md px-2 py-0.5 text-[11px] font-medium text-slate-400 hover:text-white cursor-pointer';
+        unitLabel.textContent = '만 원';
+      }
+    }
+
+    function adjustContract(inputId, delta) {
+      const el = document.getElementById(inputId);
+      const val = parseInt(el.value, 10) || 0;
+      el.value = val + delta;
+      recalculate();
+    }
+
+    function syncTargetLeverage(val) {
+      const num = parseFloat(val) || 3.0;
+      document.getElementById('targetLeverageSlider').value = num;
+      document.getElementById('targetMultiplierBadge').textContent = `${num.toFixed(2)}x`;
+      recalculate();
+    }
+
+    function setStressShock(pct) {
+      currentStressShockPct = parseFloat(pct) || 0;
+      document.getElementById('stressSlider').value = currentStressShockPct;
+      recalculate();
+    }
+
+    // =========================================================================
+    // 4. 핵심 금융 계산 엔진 (실질 레버리지, 리밸런싱 계약 수, 증거금, 스트레스 테스트)
+    // =========================================================================
+    function formatKrwManwon(krwWon) {
+      const absWon = Math.abs(krwWon);
+      const sign = krwWon < 0 ? '-' : '';
+      const totalManwon = Math.round(absWon / 10000);
+      if (totalManwon >= 10000) {
+        const eok = Math.floor(totalManwon / 10000);
+        const remMan = totalManwon % 10000;
+        return remMan > 0 ? `${sign}${eok}억 ${remMan.toLocaleString()}만 원` : `${sign}${eok}억 원`;
+      }
+      return `${sign}${totalManwon.toLocaleString()}만 원`;
+    }
+
+    function formatUsd(usd) {
+      const sign = usd < 0 ? '-' : '';
+      return `${sign}$${Math.abs(Math.round(usd)).toLocaleString()}`;
+    }
+
+    function recalculate() {
+      // 입력값 읽기
+      const nasdaqIndex = Math.max(1, parseFloat(document.getElementById('nasdaqIndex').value) || 24550);
+      const fx = Math.max(100, parseFloat(document.getElementById('usdKrwRate').value) || 1395);
+      const krwRpManwon = parseFloat(document.getElementById('krwRpInput').value) || 0;
+      const futuresCashRaw = parseFloat(document.getElementById('futuresCashInput').value) || 0;
+      const tqqqUsd = parseFloat(document.getElementById('tqqqUsdInput').value) || 0;
+      const otherStockUsd = parseFloat(document.getElementById('otherStockUsdInput').value) || 0;
+      const mnqContracts = parseInt(document.getElementById('mnqContracts').value, 10) || 0;
+      const nqContracts = parseInt(document.getElementById('nqContracts').value, 10) || 0;
+      const targetLeverage = parseFloat(document.getElementById('targetLeverageSlider').value) || 3.0;
+      const bufferPct = Math.max(0, parseFloat(document.getElementById('rebalanceBufferPct').value) || 0);
+      const mnqMaintMargin = Math.max(100, parseFloat(document.getElementById('mnqMaintMargin').value) || 2100);
+
+      // 상태 저장
+      state.nasdaqIndex = nasdaqIndex;
+      state.usdKrwRate = fx;
+      state.krwRpManwon = krwRpManwon;
+      state.futuresCash = futuresCashRaw;
+      state.tqqqUsd = tqqqUsd;
+      state.otherStockUsd = otherStockUsd;
+      state.mnqContracts = mnqContracts;
+      state.nqContracts = nqContracts;
+      state.targetLeverage = targetLeverage;
+      state.rebalanceBufferPct = bufferPct;
+      state.mnqMaintMargin = mnqMaintMargin;
+      saveStateToStorage();
+
+      // 통화 환산
+      const krwRpUsd = (krwRpManwon * 10000) / fx;
+      const futuresCashUsd = state.futuresCashCurrency === 'USD'
+        ? futuresCashRaw
+        : (futuresCashRaw * 10000) / fx;
+
+      // 보조 환산 텍스트 업데이트
+      document.getElementById('krwRpUsdHelper').textContent = `≈ ${formatUsd(krwRpUsd)}`;
+      if (state.futuresCashCurrency === 'USD') {
+        document.getElementById('futuresCashAltHelper').textContent = `원화 환산: 약 ${formatKrwManwon(futuresCashUsd * fx)}`;
+      } else {
+        document.getElementById('futuresCashAltHelper').textContent = `달러 환산: 약 ${formatUsd(futuresCashUsd)}`;
+      }
+
+      // 1계약 명목가치 (MNQ = $2 * index, NQ = $20 * index)
+      const mnqUnitUsd = nasdaqIndex * 2;
+      const nqUnitUsd = nasdaqIndex * 20;
+      document.getElementById('mnqNotionalUnit').textContent = formatUsd(mnqUnitUsd);
+      document.getElementById('mnqNotionalUnitKrw').textContent = formatKrwManwon(mnqUnitUsd * fx);
+
+      // 총 순자산 (Net Equity)
+      const netEquityUsd = krwRpUsd + futuresCashUsd + tqqqUsd + otherStockUsd;
+      const netEquityKrw = netEquityUsd * fx;
+
+      // 섹터별 명목 노출액 (Notional Exposure)
+      const mnqExposureUsd = mnqContracts * mnqUnitUsd;
+      const nqExposureUsd = nqContracts * nqUnitUsd;
+      const tqqqExposureUsd = tqqqUsd * 3;
+      const otherExposureUsd = otherStockUsd * 1;
+      const totalExposureUsd = mnqExposureUsd + nqExposureUsd + tqqqExposureUsd + otherExposureUsd;
+
+      document.getElementById('mnqTotalExposureText').textContent = `${formatUsd(mnqExposureUsd)} (${formatKrwManwon(mnqExposureUsd * fx)})`;
+      document.getElementById('nqTotalExposureText').textContent = `${formatUsd(nqExposureUsd)} (${formatKrwManwon(nqExposureUsd * fx)})`;
+
+      // 실질 레버리지 배율
+      const actualLeverage = netEquityUsd > 0 ? (totalExposureUsd / netEquityUsd) : 0;
+      const leverageDiff = actualLeverage - targetLeverage;
+      const leverageDiffPct = targetLeverage > 0 ? ((actualLeverage - targetLeverage) / targetLeverage) * 100 : 0;
+
+      // 목표 노출액 및 조정 필요 계약 수
+      const targetExposureUsd = netEquityUsd * targetLeverage;
+      const exposureGapUsd = targetExposureUsd - totalExposureUsd; // 양수면 매수 필요, 음수면 매도 필요
+      const exactMnqDelta = mnqUnitUsd > 0 ? (exposureGapUsd / mnqUnitUsd) : 0;
+      const roundedMnqDelta = Math.round(exactMnqDelta);
+
+      // 허용 밴드 판정
+      const isWithinBand = Math.abs(leverageDiffPct) <= bufferPct || roundedMnqDelta === 0;
+
+      // KPI 1 업데이트
+      document.getElementById('kpiActualLeverage').textContent = `${actualLeverage.toFixed(2)}x`;
+      document.getElementById('kpiTargetLeverageLabel').textContent = `${targetLeverage.toFixed(2)}x`;
+      document.getElementById('targetMultiplierBadge').textContent = `${targetLeverage.toFixed(2)}x`;
+      const diffSign = leverageDiff > 0 ? '+' : '';
+      document.getElementById('kpiLeverageDiff').textContent = `${diffSign}${leverageDiff.toFixed(2)}x (${diffSign}${leverageDiffPct.toFixed(1)}%)`;
+
+      const statusPill = document.getElementById('leverageStatusPill');
+      if (isWithinBand) {
+        statusPill.textContent = '적정 범위 내';
+        statusPill.className = 'rounded-full bg-emerald-500/15 px-2.5 py-0.5 text-xs font-semibold text-emerald-400 border border-emerald-500/30';
+      } else if (actualLeverage > targetLeverage) {
+        statusPill.textContent = '레버리지 과다 (축소)';
+        statusPill.className = 'rounded-full bg-rose-500/15 px-2.5 py-0.5 text-xs font-semibold text-rose-400 border border-rose-500/30';
+      } else {
+        statusPill.textContent = '레버리지 부족 (확대)';
+        statusPill.className = 'rounded-full bg-amber-500/15 px-2.5 py-0.5 text-xs font-semibold text-amber-400 border border-amber-500/30';
+      }
+
+      // KPI 2 업데이트
+      document.getElementById('kpiNetEquityKrw').textContent = formatKrwManwon(netEquityKrw);
+      document.getElementById('kpiNetEquityUsd').textContent = `${formatUsd(netEquityUsd)} USD`;
+      document.getElementById('kpiTotalExposure').textContent = `${formatUsd(totalExposureUsd)} (${formatKrwManwon(totalExposureUsd * fx)})`;
+
+      // KPI 3 (오늘의 리밸런싱 액션 가이드) 업데이트
+      const actionCard = document.getElementById('actionCard');
+      const actionBadge = document.getElementById('actionBadge');
+      const actionHeadline = document.getElementById('kpiActionHeadline');
+      const actionExact = document.getElementById('kpiActionExact');
+
+      const exactSign = exactMnqDelta > 0 ? '+' : '';
+      actionExact.textContent = `정밀 계산: ${exactSign}${exactMnqDelta.toFixed(2)} MNQ 계약`;
+      const gapSign = exposureGapUsd > 0 ? '+' : '';
+      document.getElementById('kpiExposureGap').textContent = `${gapSign}${formatUsd(exposureGapUsd)} (${gapSign}${formatKrwManwon(exposureGapUsd * fx)})`;
+
+      if (isWithinBand) {
+        actionCard.className = 'rounded-2xl border border-slate-700 bg-gradient-to-b from-slate-800/60 to-slate-900/90 p-5 shadow-xl';
+        actionBadge.textContent = '유지 (Hold)';
+        actionBadge.className = 'rounded-md bg-slate-700 px-2 py-0.5 text-[11px] font-bold text-slate-200';
+        actionHeadline.textContent = '조정 불필요 (포지션 유지)';
+        actionHeadline.className = 'text-xl sm:text-2xl font-extrabold tracking-tight text-slate-100';
+      } else if (roundedMnqDelta > 0) {
+        actionCard.className = 'rounded-2xl border border-emerald-500/40 bg-gradient-to-b from-emerald-950/40 to-slate-900/90 p-5 shadow-xl';
+        actionBadge.textContent = '매수 확대';
+        actionBadge.className = 'rounded-md bg-emerald-500/20 px-2 py-0.5 text-[11px] font-bold text-emerald-300';
+        actionHeadline.textContent = `MNQ ${Math.abs(roundedMnqDelta)}계약 추가 매수`;
+        actionHeadline.className = 'text-xl sm:text-2xl font-extrabold tracking-tight text-emerald-400';
+      } else {
+        actionCard.className = 'rounded-2xl border border-rose-500/40 bg-gradient-to-b from-rose-950/40 to-slate-900/90 p-5 shadow-xl';
+        actionBadge.textContent = '매도 축소';
+        actionBadge.className = 'rounded-md bg-rose-500/20 px-2 py-0.5 text-[11px] font-bold text-rose-300';
+        actionHeadline.textContent = `MNQ ${Math.abs(roundedMnqDelta)}계약 매도 (축소)`;
+        actionHeadline.className = 'text-xl sm:text-2xl font-extrabold tracking-tight text-rose-400';
+      }
+
+      // KPI 4 (증거금 & 안전 버퍼 진단)
+      const equivalentMnqCount = Math.abs(mnqContracts) + Math.abs(nqContracts) * 10;
+      const requiredMaintMarginUsd = equivalentMnqCount * mnqMaintMargin;
+      const marginUsagePct = futuresCashUsd > 0 ? (requiredMaintMarginUsd / futuresCashUsd) * 100 : (requiredMaintMarginUsd > 0 ? 999 : 0);
+      const excessFuturesCashUsd = futuresCashUsd - requiredMaintMarginUsd;
+      const futuresNotionalUsd = Math.abs(mnqExposureUsd) + Math.abs(nqExposureUsd);
+      const maxDropPctBeforeMarginCall = futuresNotionalUsd > 0 ? (excessFuturesCashUsd / futuresNotionalUsd) * 100 : 100;
+
+      document.getElementById('kpiMarginRatio').textContent = equivalentMnqCount === 0 ? '0.0%' : `${marginUsagePct.toFixed(1)}%`;
+      const marginPill = document.getElementById('marginStatusPill');
+      const bufferTextEl = document.getElementById('kpiDrawdownBuffer');
+
+      if (equivalentMnqCount === 0) {
+        marginPill.textContent = '선물 없음';
+        marginPill.className = 'rounded-full bg-slate-800 px-2.5 py-0.5 text-xs font-semibold text-slate-400';
+        bufferTextEl.textContent = '선물 미보유 상태';
+        bufferTextEl.className = 'font-semibold text-slate-400 tabular-nums';
+      } else if (marginUsagePct >= 90 || maxDropPctBeforeMarginCall <= 1.5) {
+        marginPill.textContent = '증거금 위험';
+        marginPill.className = 'rounded-full bg-rose-500/20 px-2.5 py-0.5 text-xs font-semibold text-rose-400 border border-rose-500/30';
+        bufferTextEl.textContent = maxDropPctBeforeMarginCall > 0
+          ? `지수 -${maxDropPctBeforeMarginCall.toFixed(1)}% 하락 시 마진콜 경고`
+          : '유지증거금 부족 (RP 자금 이체 필요)';
+        bufferTextEl.className = 'font-semibold text-rose-400 tabular-nums';
+      } else if (marginUsagePct >= 65 || maxDropPctBeforeMarginCall <= 4.0) {
+        marginPill.textContent = '주의 (버퍼 얇음)';
+        marginPill.className = 'rounded-full bg-amber-500/20 px-2.5 py-0.5 text-xs font-semibold text-amber-300 border border-amber-500/30';
+        bufferTextEl.textContent = `지수 -${maxDropPctBeforeMarginCall.toFixed(1)}% 하락까지 버팀`;
+        bufferTextEl.className = 'font-semibold text-amber-300 tabular-nums';
+      } else {
+        marginPill.textContent = '안전 버퍼 충분';
+        marginPill.className = 'rounded-full bg-emerald-500/15 px-2.5 py-0.5 text-xs font-semibold text-emerald-400 border border-emerald-500/30';
+        bufferTextEl.textContent = `지수 -${maxDropPctBeforeMarginCall.toFixed(1)}% 하락까지 버팀`;
+        bufferTextEl.className = 'font-semibold text-emerald-400 tabular-nums';
+      }
+
+      // =========================================================================
+      // 5. 시각화 바 차트 업데이트
+      // =========================================================================
+      const maxScaleUsd = Math.max(netEquityUsd, targetExposureUsd, totalExposureUsd, 1);
+
+      document.getElementById('barNetEquityLabel').textContent = `${formatUsd(netEquityUsd)} (${formatKrwManwon(netEquityKrw)})`;
+      document.getElementById('barNetEquityFill').style.width = `${Math.min(100, (netEquityUsd / maxScaleUsd) * 100)}%`;
+
+      document.getElementById('barTargetMultText').textContent = `${targetLeverage.toFixed(2)}x`;
+      document.getElementById('barTargetExposureLabel').textContent = `${formatUsd(targetExposureUsd)} (${formatKrwManwon(targetExposureUsd * fx)})`;
+      document.getElementById('barTargetExposureFill').style.width = `${Math.min(100, (targetExposureUsd / maxScaleUsd) * 100)}%`;
+
+      document.getElementById('barActualMultText').textContent = `${actualLeverage.toFixed(2)}x`;
+      document.getElementById('barActualExposureLabel').textContent = `${formatUsd(totalExposureUsd)} (${formatKrwManwon(totalExposureUsd * fx)})`;
+
+      const posMnq = Math.max(0, mnqExposureUsd);
+      const posNq = Math.max(0, nqExposureUsd);
+      const posTqqq = Math.max(0, tqqqExposureUsd);
+      const posOther = Math.max(0, otherExposureUsd);
+
+      document.getElementById('segMnq').style.width = `${(posMnq / maxScaleUsd) * 100}%`;
+      document.getElementById('segNq').style.width = `${(posNq / maxScaleUsd) * 100}%`;
+      document.getElementById('segTqqq').style.width = `${(posTqqq / maxScaleUsd) * 100}%`;
+      document.getElementById('segOther').style.width = `${(posOther / maxScaleUsd) * 100}%`;
+
+      const denom = totalExposureUsd > 0 ? totalExposureUsd : 1;
+      document.getElementById('legendMnq').textContent = `${formatUsd(mnqExposureUsd)} (${((posMnq / denom) * 100).toFixed(1)}%)`;
+      document.getElementById('legendNq').textContent = `${formatUsd(nqExposureUsd)} (${((posNq / denom) * 100).toFixed(1)}%)`;
+      document.getElementById('legendTqqq').textContent = `${formatUsd(tqqqExposureUsd)} (${((posTqqq / denom) * 100).toFixed(1)}%)`;
+      document.getElementById('legendOther').textContent = `${formatUsd(otherExposureUsd)} (${((posOther / denom) * 100).toFixed(1)}%)`;
+
+      // =========================================================================
+      // 6. 스트레스 테스트 시뮬레이션 업데이트
+      // =========================================================================
+      const shockRatio = currentStressShockPct / 100;
+      const simIndex = nasdaqIndex * (1 + shockRatio);
+
+      // 각 포지션별 손익 계산
+      const futuresPnlUsd = (mnqExposureUsd + nqExposureUsd) * shockRatio;
+      const tqqqSimValueUsd = Math.max(0, tqqqUsd * (1 + shockRatio * 3));
+      const tqqqPnlUsd = tqqqSimValueUsd - tqqqUsd;
+      const otherSimValueUsd = Math.max(0, otherStockUsd * (1 + shockRatio));
+      const otherPnlUsd = otherSimValueUsd - otherStockUsd;
+
+      const totalPnlUsd = futuresPnlUsd + tqqqPnlUsd + otherPnlUsd;
+      const simNetEquityUsd = Math.max(0, netEquityUsd + totalPnlUsd);
+      const simFuturesCashUsd = futuresCashUsd + futuresPnlUsd;
+
+      // 변동 후 총 노출액
+      const simMnqUnitUsd = simIndex * 2;
+      const simTotalExposureUsd = (mnqContracts * simMnqUnitUsd) + (nqContracts * simIndex * 20) + (tqqqSimValueUsd * 3) + otherSimValueUsd;
+      const simLeverage = simNetEquityUsd > 0 ? (simTotalExposureUsd / simNetEquityUsd) : 99.9;
+
+      // 변동 후 리밸런싱 필요 계약 수
+      const simTargetExposureUsd = simNetEquityUsd * targetLeverage;
+      const simExactMnqDelta = simMnqUnitUsd > 0 ? ((simTargetExposureUsd - simTotalExposureUsd) / simMnqUnitUsd) : 0;
+      const simRoundedMnq = Math.round(simExactMnqDelta);
+
+      const shockSign = currentStressShockPct > 0 ? '+' : '';
+      const shockLabelEl = document.getElementById('stressShockPctLabel');
+      shockLabelEl.textContent = `${shockSign}${currentStressShockPct.toFixed(1)}%`;
+      shockLabelEl.className = currentStressShockPct > 0
+        ? 'text-base font-extrabold text-emerald-400 tabular-nums'
+        : currentStressShockPct < 0
+          ? 'text-base font-extrabold text-rose-400 tabular-nums'
+          : 'text-base font-extrabold text-sky-400 tabular-nums';
+
+      document.getElementById('stressSimulatedIndexLabel').textContent = `(${simIndex.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} pt)`;
+      document.getElementById('simNetEquity').textContent = formatKrwManwon(simNetEquityUsd * fx);
+
+      const pnlSign = totalPnlUsd > 0 ? '+' : '';
+      const simPnlEl = document.getElementById('simPnlDelta');
+      simPnlEl.textContent = `손익: ${pnlSign}${formatKrwManwon(totalPnlUsd * fx)} (${pnlSign}${formatUsd(totalPnlUsd)})`;
+      simPnlEl.className = totalPnlUsd > 0
+        ? 'mt-0.5 text-xs font-semibold text-emerald-400 tabular-nums'
+        : totalPnlUsd < 0
+          ? 'mt-0.5 text-xs font-semibold text-rose-400 tabular-nums'
+          : 'mt-0.5 text-xs font-medium text-slate-400 tabular-nums';
+
+      document.getElementById('simLeverage').textContent = simNetEquityUsd > 0 ? `${simLeverage.toFixed(2)}x` : '청산 위험';
+      document.getElementById('simFuturesCash').textContent = `선물예탁금: ${formatUsd(simFuturesCashUsd)}`;
+
+      const simActionEl = document.getElementById('simAction');
+      if (simNetEquityUsd <= 0) {
+        simActionEl.textContent = '순자산 소진 (청산)';
+        simActionEl.className = 'mt-1 text-sm sm:text-base font-bold text-rose-400';
+      } else if (simRoundedMnq === 0) {
+        simActionEl.textContent = '포지션 유지 (0계약)';
+        simActionEl.className = 'mt-1 text-sm sm:text-base font-bold text-slate-200';
+      } else if (simRoundedMnq > 0) {
+        simActionEl.textContent = `MNQ ${simRoundedMnq}계약 매수`;
+        simActionEl.className = 'mt-1 text-sm sm:text-base font-bold text-emerald-400';
+      } else {
+        simActionEl.textContent = `MNQ ${Math.abs(simRoundedMnq)}계약 매도`;
+        simActionEl.className = 'mt-1 text-sm sm:text-base font-bold text-rose-400';
+      }
+
+      const simMarginRatio = simFuturesCashUsd > 0 ? (requiredMaintMarginUsd / simFuturesCashUsd) * 100 : 999;
+      document.getElementById('simMarginNote').textContent = equivalentMnqCount === 0
+        ? '증거금 점유율: 0.0%'
+        : (simFuturesCashUsd <= requiredMaintMarginUsd ? '⚠️ 유지증거금 부족 발생' : `증거금 점유율: ${simMarginRatio.toFixed(1)}%`);
+    }
+
+    // =========================================================================
+    // 7. 일일 리밸런싱 요약 클립보드 복사 & 토스트 알림
+    // =========================================================================
+    function copyDailySummary() {
+      const dateStr = new Date().toLocaleDateString('ko-KR');
+      const idx = document.getElementById('nasdaqIndex').value;
+      const fx = document.getElementById('usdKrwRate').value;
+      const actualLev = document.getElementById('kpiActualLeverage').textContent;
+      const targetLev = document.getElementById('kpiTargetLeverageLabel').textContent;
+      const equity = document.getElementById('kpiNetEquityKrw').textContent;
+      const exposure = document.getElementById('kpiTotalExposure').textContent;
+      const action = document.getElementById('kpiActionHeadline').textContent;
+      const exact = document.getElementById('kpiActionExact').textContent;
+      const margin = document.getElementById('kpiMarginRatio').textContent;
+
+      const summaryText = [
+        `[나스닥100 레버리지 일일 점검 - ${dateStr}]`,
+        `• 기준 지수: ${Number(idx).toLocaleString()} pt | 환율: ${Number(fx).toLocaleString()}원`,
+        `• 총 순자산: ${equity} | 총 명목노출: ${exposure}`,
+        `• 실질 레버리지: ${actualLev} (목표: ${targetLev})`,
+        `• 오늘의 액션: ${action} (${exact})`,
+        `• 유지증거금 점유율: ${margin}`
+      ].join('\n');
+
+      const fallbackEl = document.getElementById('clipboardFallback');
+      fallbackEl.value = summaryText;
+      fallbackEl.classList.remove('sr-only');
+      fallbackEl.select();
+      try {
+        document.execCommand('copy');
+        showToast('매매일지 요약 복사 완료', '클립보드에 복사되었습니다. 메모장이나 카톡 나에게 보내기에 바로 붙여넣으세요.', '📋');
+      } catch (e) {
+        showToast('복사 안내', '브라우저 권한으로 자동 복사가 제한되었습니다.', '⚠️');
+      }
+      fallbackEl.classList.add('sr-only');
+    }
+
+    let toastTimer = null;
+    function showToast(title, desc, icon = 'ℹ️') {
+      const box = document.getElementById('toastBox');
+      document.getElementById('toastTitle').textContent = title;
+      document.getElementById('toastDesc').textContent = desc;
+      document.getElementById('toastIcon').textContent = icon;
+      box.classList.remove('hidden');
+
+      if (toastTimer) clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => {
+        box.classList.add('hidden');
+      }, 4500);
+    }
+  </script>
+</body>
+</html>
